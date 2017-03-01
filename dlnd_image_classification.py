@@ -268,7 +268,8 @@ logits = conv_net(x, keep_prob)
 logits = tf.identity(logits, name='logits')
 
 # Loss and Optimizer
-cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=y))
+logits_softmax = tf.nn.softmax(logits)
+cost = -tf.reduce_sum(y * tf.log(logits_softmax))
 optimizer = tf.train.AdamOptimizer().minimize(cost)
 
 # Accuracy
