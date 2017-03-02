@@ -131,7 +131,7 @@ def conv2d_maxpool(x_tensor, conv_num_outputs, conv_ksize, conv_strides, pool_ks
     return max_pool
 
 
-def conv2d_contrib(x_tensor, conv_num_outputs, conv_ksize, conv_strides, pool_ksize, pool_strides):
+def conv2d_contrib(x_tensor, conv_num_outputs, conv_ksize, conv_strides, pool_ksize, pool_strides, name):
     """
     Apply convolution then max pooling to x_tensor
     :param x_tensor: TensorFlow Tensor
@@ -143,9 +143,15 @@ def conv2d_contrib(x_tensor, conv_num_outputs, conv_ksize, conv_strides, pool_ks
     """
 
     conv1 = tf.contrib.layers.convolution2d( x_tensor, conv_num_outputs, stride=(1,1), kernel_size=conv_ksize, activation_fn=tf.nn.relu, padding='SAME')#, biases_initializer=tf.zeros_initializer() )
+    tf.summary.histogram( name + '_conv1', conv1 )
+    
     conv2 = tf.contrib.layers.convolution2d( conv1, conv_num_outputs, stride=conv_strides, kernel_size=conv_ksize, activation_fn=tf.nn.relu, padding='VALID')#, biases_initializer=tf.zeros_initializer())
+    tf.summary.histogram( name + '_conv2', conv2 )
+    
     max_pool = tf.contrib.layers.max_pool2d( conv2, kernel_size=pool_ksize, stride=pool_strides, padding='VALID')
-
+    tf.summary.histogram( name + '_max_pool', max_pool )
+    
+    
     return max_pool
 
 
@@ -246,23 +252,27 @@ def conv_net(x_tensor, keep_prob):
     : keep_prob: Placeholder tensor that hold dropout keep probability.
     : return: Tensor that represents logits
     """
-    x_1 = conv2d_maxpool(x_tensor,
+    x_1 = conv2d_contrib(x_tensor,
                           conv_num_outputs=32,
                           conv_ksize=(3,3),
                           conv_strides=(1,1), 
                           pool_ksize=(2,2), 
-                          pool_strides=(2,2)
+                          pool_strides=(2,2),
+                          name='x1'
                          )
     
-    x_2 = conv2d_maxpool(x_1,
+    x_2 = conv2d_contrib(x_1,
                           conv_num_outputs=64,
                           conv_ksize=(3,3),
                           conv_strides=(1,1), 
                           pool_ksize=(2,2), 
-                          pool_strides=(2,2)
+                          pool_strides=(2,2),
+                          name='x2'
                          )
     
-    
+    tf.summary.histogram('x1',x_1)
+    tf.summary.histogram('x2',x_2)
+  
     x_3 = flatten(x_2)
     x_4 = fully_conn(x_3, num_outputs=512)
     x_5 = output(x_4, 10)
@@ -300,6 +310,8 @@ optimizer = tf.train.AdamOptimizer().minimize(cost)
 correct_pred = tf.equal(tf.argmax(logits, 1), tf.argmax(y, 1))
 accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32), name='accuracy')
 
+tf.summary.scalar('loss',cost)
+tf.summary.scalar('accuracy',accuracy)
 #tests.test_conv_net(conv_net)
 
 
@@ -316,7 +328,7 @@ accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32), name='accuracy')
 
 # In[14]:
 
-def train_neural_network(session, optimizer, keep_probability, feature_batch, label_batch):
+def train_neural_network(session, optimizer, keep_probability, feature_batch, label_batch, merged):
     """
     Optimize the session on a batch of images and labels
     : session: Current TensorFlow session
@@ -325,7 +337,8 @@ def train_neural_network(session, optimizer, keep_probability, feature_batch, la
     : feature_batch: Batch of Numpy image data
     : label_batch: Batch of Numpy label data
     """
-    session.run( optimizer, feed_dict={x: feature_batch, y: label_batch, keep_prob: keep_probability} )
+    _, summery_str = session.run( [optimizer, merged], feed_dict={x: feature_batch, y: label_batch, keep_prob: keep_probability})
+    return summery_str
 
 
 """
@@ -383,25 +396,30 @@ keep_probability = False
 """
 DON'T MODIFY ANYTHING IN THIS CELL
 """
+import shutil
+shutil.rmtree('./tensorboard/')
+
+
 print('Checking the Training on a Single Batch...')
-with tf.Session(config=tf.ConfigProto(log_device_placement=True)) as sess:
+with tf.Session() as sess:
     # Initializing the variables
     sess.run(tf.global_variables_initializer())
     writer = tf.summary.FileWriter('./tensorboard/', sess.graph)
+    merged = tf.summary.merge_all()
     
     # Training cycle
     for epoch in range(epochs):
         batch_i = 1
         data_processed = 0
-        for batch_features, batch_labels in helper.load_preprocess_training_batch(batch_i, batch_size):
+        for i, (batch_features, batch_labels) in enumerate(helper.load_preprocess_training_batch(batch_i, batch_size)):
             data_processed += len(batch_features)
-            train_neural_network(sess, optimizer, keep_probability, batch_features, batch_labels)
+            summary_str = train_neural_network(sess, optimizer, keep_probability, batch_features, batch_labels, merged)
+            writer.add_summary(summary_str, epoch * batch_size + i )
             #print('%i cost: %f' % (data_processed, c) + ' ' + str(l))
 
         print('Epoch {:>2}, CIFAR-10 Batch {}:  '.format(epoch + 1, batch_i), end='' )
         print_stats(sess, batch_features, batch_labels, cost, accuracy)
-
-
+        
 # ### Fully Train the Model
 # Now that you got a good accuracy with a single CIFAR-10 batch, try it with all five batches.
 
