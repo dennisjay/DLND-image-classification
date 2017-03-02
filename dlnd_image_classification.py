@@ -65,7 +65,7 @@ def neural_net_keep_prob_input():
     Return a Tensor for keep probability
     : return: Tensor for keep probability.
     """
-    return tf.placeholder(tf.bool, name='keep_prob')
+    return tf.placeholder(tf.float32, name='keep_prob')
 
 
 
@@ -101,27 +101,51 @@ def conv2d_maxpool(x_tensor, conv_num_outputs, conv_ksize, conv_strides, pool_ks
     :param pool_strides: Stride 2-D Tuple for pool
     : return: A tensor that represents convolution and max pooling of x_tensor
     """
+    conv1 = tf.contrib.layers.convolution2d( x_tensor, conv_num_outputs, stride=(1,1), kernel_size=conv_ksize, activation_fn=tf.nn.relu, padding='SAME')#, biases_initializer=tf.zeros_initializer() )
 
-    input_shape = x_tensor.get_shape().as_list()[1:]  
-    conv2d_weights_shape = (conv_ksize[0], conv_ksize[1], input_shape[2], conv_num_outputs)   
-    conv2d_weights = tf.Variable(tf.truncated_normal(conv2d_weights_shape)) 
-    #conv2d_bias = tf.Variable(tf.zeros(conv_num_outputs))
-    conv2d = tf.nn.conv2d( x_tensor, conv2d_weights, strides=(1, 1, 1, 1), padding='SAME') #+ conv2d_bias
+    x_tensor_shape = x_tensor.get_shape().as_list()
+    print(str(x_tensor_shape))
+    conv2d_weights_shape = (conv_ksize[0], conv_ksize[1], x_tensor_shape[3], conv_num_outputs)
+    print(str(conv2d_weights_shape))
+    conv2d_weights = tf.Variable(tf.random_uniform(conv2d_weights_shape))
+    conv2d_bias = tf.Variable(tf.zeros(conv_num_outputs))
+    conv2d = tf.nn.bias_add(tf.nn.conv2d( x_tensor, conv2d_weights, strides=(1, 1, 1, 1), padding='SAME'), conv2d_bias)
 
     activation = tf.nn.relu(conv2d)
-    
-    conv2d2_weights_shape = (conv_ksize[0], conv_ksize[1], conv_num_outputs, conv_num_outputs)   
-    conv2d2_strides = (1, conv_strides[0], conv_strides[1], 1) 
-    conv2d2_weights = tf.Variable(tf.truncated_normal(conv2d2_weights_shape)) 
-    #conv2d2_bias = tf.Variable(tf.zeros(conv_num_outputs))
-    conv2d2 = tf.nn.conv2d( activation, conv2d2_weights, strides=conv2d2_strides, padding='VALID') #+ conv2d2_bias
+
+    conv2d_shape = conv2d.get_shape().as_list()
+    print(str(conv2d_shape))
+    conv2d2_weights_shape = (conv_ksize[0], conv_ksize[1], conv2d_shape[3], conv_num_outputs)
+    print(str(conv2d2_weights_shape))
+    conv2d2_strides = (1, conv_strides[0], conv_strides[1], 1)
+    conv2d2_weights = tf.Variable(tf.random_uniform(conv2d2_weights_shape))
+    conv2d2_bias = tf.Variable(tf.zeros(conv_num_outputs))
+    conv2d2 = tf.nn.bias_add(tf.nn.conv2d( activation, conv2d2_weights, strides=conv2d2_strides, padding='VALID'), conv2d2_bias)
 
     activation2 = tf.nn.relu(conv2d2)
-   
+
     max_pool_ksize = (1, pool_ksize[0], pool_ksize[1], 1)
     max_pool_strides = (1, pool_strides[0], pool_strides[1], 1)
     max_pool = tf.nn.max_pool( activation2, max_pool_ksize, strides=max_pool_strides, padding='VALID')
-    
+
+    return max_pool
+
+
+def conv2d_contrib(x_tensor, conv_num_outputs, conv_ksize, conv_strides, pool_ksize, pool_strides):
+    """
+    Apply convolution then max pooling to x_tensor
+    :param x_tensor: TensorFlow Tensor
+    :param conv_num_outputs: Number of outputs for the convolutional layer
+    :param conv_strides: Stride 2-D Tuple for convolution
+    :param pool_ksize: kernal size 2-D Tuple for pool
+    :param pool_strides: Stride 2-D Tuple for pool
+    : return: A tensor that represents convolution and max pooling of x_tensor
+    """
+
+    conv1 = tf.contrib.layers.convolution2d( x_tensor, conv_num_outputs, stride=(1,1), kernel_size=conv_ksize, activation_fn=tf.nn.relu, padding='SAME')#, biases_initializer=tf.zeros_initializer() )
+    conv2 = tf.contrib.layers.convolution2d( conv1, conv_num_outputs, stride=conv_strides, kernel_size=conv_ksize, activation_fn=tf.nn.relu, padding='VALID')#, biases_initializer=tf.zeros_initializer())
+    max_pool = tf.contrib.layers.max_pool2d( conv2, kernel_size=pool_ksize, stride=pool_strides, padding='VALID')
+
     return max_pool
 
 
@@ -192,7 +216,10 @@ def output(x_tensor_xyz, num_outputs):
     : return: A 2-D tensor where the second dimension is num_outputs.
     """
     # TODO: Implement Function
-    return tf.layers.dense(x_tensor_xyz, num_outputs, kernel_initializer=tf.contrib.layers.xavier_initializer())
+    return  tf.contrib.layers.fully_connected(x_tensor_xyz, num_outputs,
+                                            weights_initializer=tf.contrib.layers.xavier_initializer(),
+                                            biases_initializer=tf.zeros_initializer()
+                                            )
 
 """
 DON'T MODIFY ANYTHING IN THIS CELL THAT IS BELOW THIS LINE
@@ -219,19 +246,17 @@ def conv_net(x_tensor, keep_prob):
     : keep_prob: Placeholder tensor that hold dropout keep probability.
     : return: Tensor that represents logits
     """
-    input_shape = x_tensor.get_shape()
-    
-    x_1 = conv2d_maxpool(x_tensor, 
-                          conv_num_outputs=32, 
-                          conv_ksize=(3,3), 
+    x_1 = conv2d_maxpool(x_tensor,
+                          conv_num_outputs=32,
+                          conv_ksize=(3,3),
                           conv_strides=(1,1), 
                           pool_ksize=(2,2), 
                           pool_strides=(2,2)
                          )
     
-    x_2 = conv2d_maxpool(x_1, 
-                          conv_num_outputs=64, 
-                          conv_ksize=(3,3), 
+    x_2 = conv2d_maxpool(x_1,
+                          conv_num_outputs=64,
+                          conv_ksize=(3,3),
                           conv_strides=(1,1), 
                           pool_ksize=(2,2), 
                           pool_strides=(2,2)
@@ -265,16 +290,15 @@ keep_prob = neural_net_keep_prob_input()
 logits = conv_net(x, keep_prob)
 
 # Name logits Tensor, so that is can be loaded from disk after training
-logits = tf.identity(logits, name='logits')
+#logits = tf.identity(logits, name='logits')
 
 # Loss and Optimizer
-logits_softmax = tf.nn.softmax(logits)
-cost = -tf.reduce_sum(y * tf.log(logits_softmax))
+cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=y ))
 optimizer = tf.train.AdamOptimizer().minimize(cost)
 
 # Accuracy
-#correct_pred = tf.equal(tf.argmax(logits, 1), tf.argmax(y, 1))
-#accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32), name='accuracy')
+correct_pred = tf.equal(tf.argmax(logits, 1), tf.argmax(y, 1))
+accuracy = tf.reduce_mean(tf.cast(correct_pred, tf.float32), name='accuracy')
 
 #tests.test_conv_net(conv_net)
 
@@ -292,7 +316,7 @@ optimizer = tf.train.AdamOptimizer().minimize(cost)
 
 # In[14]:
 
-def train_neural_network(session, optimizer, keep_probability, feature_batch, label_batch, cost_tensor):
+def train_neural_network(session, optimizer, keep_probability, feature_batch, label_batch):
     """
     Optimize the session on a batch of images and labels
     : session: Current TensorFlow session
@@ -301,9 +325,8 @@ def train_neural_network(session, optimizer, keep_probability, feature_batch, la
     : feature_batch: Batch of Numpy image data
     : label_batch: Batch of Numpy label data
     """
-    c, _ = session.run( [cost, optimizer], feed_dict={'x:0': feature_batch, 'y:0': label_batch, 'keep_prob:0': keep_probability} )
+    session.run( optimizer, feed_dict={x: feature_batch, y: label_batch, keep_prob: keep_probability} )
 
-    return c
 
 """
 DON'T MODIFY ANYTHING IN THIS CELL THAT IS BELOW THIS LINE
@@ -325,10 +348,10 @@ def print_stats(session, feature_batch, label_batch, cost, accuracy):
     : cost: TensorFlow cost function
     : accuracy: TensorFlow accuracy function
     """
-    feed_dict={'x:0': feature_batch, 'y:0': label_batch, 'keep_prob:0': keep_probability}
+    feed_dict={x: feature_batch, y: label_batch, keep_prob: keep_probability}
     cost = session.run( cost, feed_dict=feed_dict )
     
-    feed_dict_valid={'x:0': valid_features, 'y:0': valid_labels, 'keep_prob:0': keep_probability}
+    feed_dict_valid={x: valid_features, y: valid_labels, keep_prob: keep_probability}
     valid_acc = session.run( accuracy, feed_dict=feed_dict_valid)
     
     print( "cost: %0.5f\tvalid_acc: %0.4f" % (cost, valid_acc))
@@ -347,8 +370,8 @@ def print_stats(session, feature_batch, label_batch, cost, accuracy):
 # In[ ]:
 
 # TODO: Tune Parameters
-epochs = 200
-batch_size = 256
+epochs = 100
+batch_size = 64
 keep_probability = False
 
 
@@ -361,7 +384,7 @@ keep_probability = False
 DON'T MODIFY ANYTHING IN THIS CELL
 """
 print('Checking the Training on a Single Batch...')
-with tf.Session() as sess:
+with tf.Session(config=tf.ConfigProto(log_device_placement=True)) as sess:
     # Initializing the variables
     sess.run(tf.global_variables_initializer())
     writer = tf.summary.FileWriter('./tensorboard/', sess.graph)
@@ -372,11 +395,11 @@ with tf.Session() as sess:
         data_processed = 0
         for batch_features, batch_labels in helper.load_preprocess_training_batch(batch_i, batch_size):
             data_processed += len(batch_features)
-            c = train_neural_network(sess, optimizer, keep_probability, batch_features, batch_labels, cost)
-            print('%i cost: %f' % (data_processed, c))
+            train_neural_network(sess, optimizer, keep_probability, batch_features, batch_labels)
+            #print('%i cost: %f' % (data_processed, c) + ' ' + str(l))
 
         print('Epoch {:>2}, CIFAR-10 Batch {}:  '.format(epoch + 1, batch_i), end='' )
-        #print_stats(sess, batch_features, batch_labels, cost, accuracy)
+        print_stats(sess, batch_features, batch_labels, cost, accuracy)
 
 
 # ### Fully Train the Model
