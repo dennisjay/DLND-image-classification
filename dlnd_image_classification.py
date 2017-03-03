@@ -108,7 +108,7 @@ def conv2d_maxpool(x_tensor, conv_num_outputs, conv_ksize, conv_strides, pool_ks
     conv2d_weights_shape = (conv_ksize[0], conv_ksize[1], x_tensor_shape[3], conv_num_outputs)
     print(str(conv2d_weights_shape))
     conv2d_weights = tf.Variable(tf.random_uniform(conv2d_weights_shape))
-    conv2d_bias = tf.Variable(tf.zeros(conv_num_outputs))
+    conv2d_bias = tf.zeros(conv_num_outputs)
     conv2d = tf.nn.bias_add(tf.nn.conv2d( x_tensor, conv2d_weights, strides=(1, 1, 1, 1), padding='SAME'), conv2d_bias)
 
     activation = tf.nn.relu(conv2d)
@@ -119,7 +119,7 @@ def conv2d_maxpool(x_tensor, conv_num_outputs, conv_ksize, conv_strides, pool_ks
     print(str(conv2d2_weights_shape))
     conv2d2_strides = (1, conv_strides[0], conv_strides[1], 1)
     conv2d2_weights = tf.Variable(tf.random_uniform(conv2d2_weights_shape))
-    conv2d2_bias = tf.Variable(tf.zeros(conv_num_outputs))
+    conv2d2_bias = tf.zeros(conv_num_outputs)
     conv2d2 = tf.nn.bias_add(tf.nn.conv2d( activation, conv2d2_weights, strides=conv2d2_strides, padding='VALID'), conv2d2_bias)
 
     activation2 = tf.nn.relu(conv2d2)
@@ -142,8 +142,11 @@ def conv2d_contrib(x_tensor, conv_num_outputs, conv_ksize, conv_strides, pool_ks
     : return: A tensor that represents convolution and max pooling of x_tensor
     """
 
-    conv1 = tf.contrib.layers.convolution2d( x_tensor, conv_num_outputs, stride=(1,1), kernel_size=conv_ksize, activation_fn=tf.nn.relu, padding='SAME')#, biases_initializer=tf.zeros_initializer() )
-    conv2 = tf.contrib.layers.convolution2d( conv1, conv_num_outputs, stride=conv_strides, kernel_size=conv_ksize, activation_fn=tf.nn.relu, padding='VALID')#, biases_initializer=tf.zeros_initializer())
+    conv1 = tf.contrib.layers.convolution2d( x_tensor, conv_num_outputs, stride=(1,1), kernel_size=conv_ksize, activation_fn=None, padding='SAME')#, biases_initializer=tf.zeros_initializer() )
+    conv1 = tf.nn.sigmoid(conv1)
+    conv2 = tf.contrib.layers.convolution2d( conv1, conv_num_outputs, stride=conv_strides, kernel_size=conv_ksize, activation_fn=None, padding='VALID')#, biases_initializer=tf.zeros_initializer())
+    conv2 = tf.nn.sigmoid(conv2)
+
     max_pool = tf.contrib.layers.max_pool2d( conv2, kernel_size=pool_ksize, stride=pool_strides, padding='VALID')
 
     return max_pool
@@ -246,7 +249,7 @@ def conv_net(x_tensor, keep_prob):
     : keep_prob: Placeholder tensor that hold dropout keep probability.
     : return: Tensor that represents logits
     """
-    x_1 = conv2d_maxpool(x_tensor,
+    x_1 = conv2d_contrib(x_tensor,
                           conv_num_outputs=32,
                           conv_ksize=(3,3),
                           conv_strides=(1,1), 
@@ -254,7 +257,7 @@ def conv_net(x_tensor, keep_prob):
                           pool_strides=(2,2)
                          )
     
-    x_2 = conv2d_maxpool(x_1,
+    x_2 = conv2d_contrib(x_1,
                           conv_num_outputs=64,
                           conv_ksize=(3,3),
                           conv_strides=(1,1), 
